@@ -1355,7 +1355,7 @@
     </div>
   </div>
 
-  <audio id="bg-music" src="music.mp3" loop preload="auto" playsinline webkit-playsinline>
+  <audio id="bg-music" src="music.mp3" preload="auto" playsinline webkit-playsinline>
     <source src="music.mp3" type="audio/mpeg">
     <source src="Tu%20Humsafar%20Hai%20-%20Raabta%20_%20Agent%20Vinod.mp3" type="audio/mpeg">
   </audio>
@@ -2299,7 +2299,7 @@
           try {
             webAudioSource = audioCtx.createBufferSource();
             webAudioSource.buffer = audioBuffer;
-            webAudioSource.loop = true;
+            webAudioSource.loop = false;
             webAudioSource.connect(audioCtx.destination);
             webAudioSource.start(0);
             return true;
