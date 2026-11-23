@@ -818,6 +818,46 @@
       line-height: 1;
     }
 
+    .audio-prompt {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 998;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--cream);
+      background: rgba(var(--veil), .88);
+      border: 1px solid rgba(245, 201, 155, .45);
+      border-radius: 999px;
+      padding: 10px 22px;
+      display: none;
+      align-items: center;
+      gap: 9px;
+      opacity: 0;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, .45);
+      animation: promptPulse 2s infinite ease-in-out;
+      transition: opacity .5s ease, transform .5s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    @keyframes promptPulse {
+      0%, 100% {
+        transform: translateX(-50%) scale(1);
+        border-color: rgba(245, 201, 155, .45);
+      }
+      50% {
+        transform: translateX(-50%) scale(1.04);
+        border-color: var(--accent);
+      }
+    }
+
     .toast {
       position: fixed;
       top: 24px;
@@ -1315,10 +1355,15 @@
     </div>
   </div>
 
-  <audio id="bg-music" loop autoplay preload="auto">
-    <source src="Tu Humsafar Hai - Raabta _ Agent Vinod.mp3" type="audio/mpeg">
+  <audio id="bg-music" src="music.mp3" loop preload="auto" playsinline webkit-playsinline>
+    <source src="music.mp3" type="audio/mpeg">
     <source src="Tu%20Humsafar%20Hai%20-%20Raabta%20_%20Agent%20Vinod.mp3" type="audio/mpeg">
   </audio>
+
+  <div id="audio-prompt" class="audio-prompt" role="button" aria-label="Tap anywhere for music">
+    <span>🎵</span>
+    <span>Tap anywhere for music ✨</span>
+  </div>
 
   <button id="edit" type="button" aria-label="Personalize message for your love">
     <span class="edit-icon">💌</span>
@@ -2208,40 +2253,160 @@
         if (e.key === "Escape") openPanel(false);
       });
 
-      /* ---------- Background Music: Tu Humsafar Hai (Autoplay) ---------- */
+      /* ---------- Zero-Latency Audio Engine for iOS, Android & Desktop ---------- */
       (function () {
-        var audio = document.getElementById("bg-music");
-        if (!audio) return;
+        var AUDIO_URL = "music.mp3";
+        var audioEl = document.getElementById("bg-music");
+        var promptEl = document.getElementById("audio-prompt");
+        var audioCtx = null;
+        var audioBuffer = null;
+        var webAudioSource = null;
+        var isPlaying = false;
 
-        function startAudio() {
-          var p = audio.play();
-          if (p !== undefined) {
-            p.then(function () {
-              cleanup();
-            }).catch(function () {});
+        try {
+          var AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            audioCtx = new AudioContext();
+          }
+        } catch (e) {}
+
+        // Preload array buffer and decode in memory immediately for 0ms delay
+        fetch(AUDIO_URL)
+          .then(function (res) { return res.arrayBuffer(); })
+          .then(function (buf) {
+            try {
+              var blob = new Blob([buf], { type: "audio/mpeg" });
+              var blobUrl = URL.createObjectURL(blob);
+              if (audioEl) {
+                audioEl.src = blobUrl;
+                audioEl.load();
+              }
+            } catch (e) {}
+
+            if (audioCtx && audioCtx.decodeAudioData) {
+              audioCtx.decodeAudioData(buf.slice(0), function (decoded) {
+                audioBuffer = decoded;
+                if (isPlaying && !webAudioSource) {
+                  playWebAudio();
+                }
+              }, function () {});
+            }
+          })
+          .catch(function () {});
+
+        function playWebAudio() {
+          if (!audioCtx || !audioBuffer || webAudioSource) return false;
+          try {
+            webAudioSource = audioCtx.createBufferSource();
+            webAudioSource.buffer = audioBuffer;
+            webAudioSource.loop = true;
+            webAudioSource.connect(audioCtx.destination);
+            webAudioSource.start(0);
+            return true;
+          } catch (e) {
+            return false;
           }
         }
 
-        var events = ["pointerdown", "touchstart", "click", "keydown", "scroll"];
-        function onInteract() {
-          startAudio();
+        function hidePrompt() {
+          if (!promptEl) return;
+          promptEl.style.opacity = "0";
+          promptEl.style.pointerEvents = "none";
+          setTimeout(function () {
+            if (promptEl && promptEl.parentNode) {
+              promptEl.parentNode.removeChild(promptEl);
+            }
+          }, 600);
         }
 
-        function cleanup() {
+        function showPrompt() {
+          if (isPlaying || !promptEl) return;
+          promptEl.style.display = "flex";
+          requestAnimationFrame(function () {
+            promptEl.style.opacity = "1";
+          });
+        }
+
+        function triggerAudio() {
+          if (isPlaying) return;
+
+          // Resume AudioContext on iOS/Android gesture
+          if (audioCtx && audioCtx.state === "suspended") {
+            audioCtx.resume().catch(function () {});
+          }
+
+          var started = false;
+          if (audioBuffer) {
+            started = playWebAudio();
+          }
+
+          if (!started && audioEl) {
+            var p = audioEl.play();
+            if (p !== undefined) {
+              p.then(function () {
+                isPlaying = true;
+                hidePrompt();
+                removeListeners();
+              }).catch(function () {
+                showPrompt();
+              });
+              return;
+            }
+          }
+
+          if (started) {
+            isPlaying = true;
+            hidePrompt();
+            removeListeners();
+          }
+        }
+
+        var events = ["touchstart", "touchend", "pointerdown", "click", "keydown"];
+        function onGesture() {
+          triggerAudio();
+        }
+
+        function removeListeners() {
           events.forEach(function (ev) {
-            window.removeEventListener(ev, onInteract, true);
+            document.removeEventListener(ev, onGesture, true);
+            window.removeEventListener(ev, onGesture, true);
           });
         }
 
         events.forEach(function (ev) {
-          window.addEventListener(ev, onInteract, { once: true, capture: true });
+          document.addEventListener(ev, onGesture, { capture: true, passive: true });
+          window.addEventListener(ev, onGesture, { capture: true, passive: true });
         });
 
-        startAudio();
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", startAudio);
+        if (promptEl) {
+          promptEl.addEventListener("click", function (e) {
+            e.stopPropagation();
+            triggerAudio();
+          });
         }
-        window.addEventListener("load", startAudio);
+
+        // Try playing immediately on load (succeeds on desktop)
+        triggerAudio();
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", triggerAudio);
+        }
+        window.addEventListener("load", triggerAudio);
+
+        // If blocked by iOS/Android browser security, show friendly hint
+        setTimeout(function () {
+          if (!isPlaying) showPrompt();
+        }, 1200);
+
+        // Resume when returning to tab
+        document.addEventListener("visibilitychange", function () {
+          if (document.visibilityState === "visible" && isPlaying) {
+            if (audioCtx && audioCtx.state === "suspended") {
+              audioCtx.resume().catch(function () {});
+            } else if (audioEl && audioEl.paused && !webAudioSource) {
+              audioEl.play().catch(function () {});
+            }
+          }
+        });
       })();
     })();
   </script>
