@@ -818,6 +818,53 @@
       line-height: 1;
     }
 
+    #music-btn {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      z-index: 20;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--cream);
+      background: rgba(var(--veil), .78);
+      border: 1px solid rgba(245, 201, 155, .35);
+      border-radius: 999px;
+      padding: 10px 18px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: transform .2s var(--ease), background .2s var(--ease), border-color .2s var(--ease), color .2s var(--ease);
+    }
+
+    #music-btn:hover {
+      transform: translateY(-2px);
+      background: rgba(var(--veil), .92);
+      border-color: var(--accent);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, .5);
+      color: var(--accent);
+    }
+
+    #music-btn .music-icon {
+      font-size: 13px;
+      line-height: 1;
+      display: inline-block;
+      transition: transform .3s ease;
+    }
+
+    #music-btn.playing .music-icon {
+      animation: musicPulse 1.8s infinite ease-in-out;
+    }
+
+    @keyframes musicPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.25); color: var(--accent); }
+    }
+
     .toast {
       position: fixed;
       top: 24px;
@@ -1162,9 +1209,14 @@
 
     @media (prefers-reduced-motion: reduce) {
 
-      #edit {
+      #edit,
+      #music-btn {
         opacity: 1;
         animation: none
+      }
+
+      #music-btn.playing .music-icon {
+        animation: none;
       }
 
       #panel {
@@ -1314,6 +1366,16 @@
       <div id="l2"></div>
     </div>
   </div>
+
+  <audio id="bg-music" loop preload="auto">
+    <source src="Tu Humsafar Hai - Raabta _ Agent Vinod.mp3" type="audio/mpeg">
+    <source src="Tu%20Humsafar%20Hai%20-%20Raabta%20_%20Agent%20Vinod.mp3" type="audio/mpeg">
+  </audio>
+
+  <button id="music-btn" type="button" aria-label="Toggle background music" title="Play / Pause Music">
+    <span class="music-icon">🎶</span>
+    <span class="music-text">Tu Humsafar Hai</span>
+  </button>
 
   <button id="edit" type="button" aria-label="Personalize message for your love">
     <span class="edit-icon">💌</span>
@@ -2202,6 +2264,78 @@
       document.addEventListener("keydown", function (e) {
         if (e.key === "Escape") openPanel(false);
       });
+
+      /* ---------- Background Music: Tu Humsafar Hai ---------- */
+      (function () {
+        var audio = document.getElementById("bg-music");
+        var btn = document.getElementById("music-btn");
+        if (!audio || !btn) return;
+
+        var icon = btn.querySelector(".music-icon");
+        var text = btn.querySelector(".music-text");
+
+        function updateState(playing) {
+          if (playing) {
+            btn.classList.add("playing");
+            if (icon) icon.textContent = "🎶";
+            if (text) text.textContent = "Tu Humsafar Hai";
+            btn.setAttribute("title", "Click to pause music");
+            btn.setAttribute("aria-label", "Pause music");
+          } else {
+            btn.classList.remove("playing");
+            if (icon) icon.textContent = "▶️";
+            if (text) text.textContent = "Play Song";
+            btn.setAttribute("title", "Click to play music");
+            btn.setAttribute("aria-label", "Play music");
+          }
+        }
+
+        function tryPlay() {
+          var p = audio.play();
+          if (p !== undefined) {
+            p.then(function () {
+              updateState(true);
+            }).catch(function () {
+              updateState(false);
+              enableOnInteraction();
+            });
+          }
+        }
+
+        function enableOnInteraction() {
+          function onInteract() {
+            audio.play().then(function () {
+              updateState(true);
+            }).catch(function () {});
+            window.removeEventListener("pointerdown", onInteract);
+            window.removeEventListener("touchstart", onInteract);
+            window.removeEventListener("click", onInteract);
+            window.removeEventListener("keydown", onInteract);
+          }
+          window.addEventListener("pointerdown", onInteract, { once: true });
+          window.addEventListener("touchstart", onInteract, { once: true });
+          window.addEventListener("click", onInteract, { once: true });
+          window.addEventListener("keydown", onInteract, { once: true });
+        }
+
+        btn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          if (audio.paused) {
+            audio.play().then(function () {
+              updateState(true);
+            }).catch(function () {});
+          } else {
+            audio.pause();
+            updateState(false);
+          }
+        });
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", tryPlay);
+        } else {
+          tryPlay();
+        }
+      })();
     })();
   </script>
 </body>
